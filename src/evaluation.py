@@ -3,10 +3,6 @@ import ast
 import csv
 import argparse
 
-""
-Evaluation script debugged by Raheleh
-""
-
 
 def calculate_values(list_gold,list_comp) :
     set_gold=set(list_gold)
@@ -30,67 +26,71 @@ def calculate_metric(TP,FP,FN) :
         recall=TP/float(sum_recall_deno)
     return (precision,recall)
 
-def sepKeys(firstKey,secondKey,line,myDict):
-    idx = line.find(firstKey+":")
+def sep_keys(first_key,second_key,line,mydict):
+    idx = line.find(first_key+":")
     if (idx == -1):
-        return myDict
+        return mydict
     line = line[idx:]
-    if (secondKey==""):
-        part = line.strip()
+    if (second_key==""):
+        block = line.strip()
     else:
-        part = line.split(secondKey+":")[0].strip()
+        block = line.split(second_key+":")[0].strip()
 
-    if part.endswith("|"):
-        part = part[:-1]
-    parts2 = part.split(":")
+    if block.endswith("|"):
+        block = block[:-1]
+    parts = block.split(":")
 
-    key = parts2[0].strip()
-    value = parts2[1].strip()
-    myDict[key] = value
-    return myDict
+    key = parts[0].strip()
+    value = parts[1].strip()
+    mydict[key] = value
+    return mydict
 
-
-def loadDict(fileName):
+#Each file contains all the citations to a reference article. Therefore the keys in the dictionary for each file are the citing articles
+#and each citing article then have a list of citation marker offsets
+def load_dict(filename):
     
     header_fields = ['Citance Number', 'Reference Article','Citing Article','Citation Marker Offset','Citation Marker',
                      'Citation Offset','Citation Text','Reference Offset','Reference Text','Discourse Facet','Annotator']
     
-    myFile=open(fileName,"r")
-    retDict = {}
+    myfile=open(filename,"r")
+    res = {}
 
-    for line in myFile.readlines():
+    for line in myfile.readlines():
         line = line.strip()
         if line.strip()=="":
             continue
             
-        myDict = {}
+        mydict = {}
         for idx in range(0,len(header_fields)):
             if idx == (len(header_fields)-1):
-                myDict = sepKeys(header_fields[idx],"",line,myDict)
+                mydict = sep_keys(header_fields[idx],"",line,mydict)
             else:
-                myDict = sepKeys(header_fields[idx],header_fields[idx+1],line,myDict)
+                mydict = sep_keys(header_fields[idx],header_fields[idx+1],line,mydict)
         
-        refArtc = myDict['Citing Article']
-        markerOff = myDict['Citation Marker Offset']
+        citing_article = mydict['Citing Article']
+
+        if not mydict['Citation Marker Offset'].startswith("["):
+            mydict['Citation Marker Offset'] = "[" + mydict['Citation Marker Offset']
+        if not mydict['Citation Marker Offset'].endswith("]"):
+            mydict['Citation Marker Offset'] = mydict['Citation Marker Offset'] + "]"
+        marker_offset = mydict['Citation Marker Offset']
          
-        if not myDict['Discourse Facet'].startswith("["):
-            myDict['Discourse Facet'] = "[\'" + myDict['Discourse Facet'] + "\']"
-        myDict['Discourse Facet'] = ast.literal_eval(myDict['Discourse Facet'])
+        if not mydict['Discourse Facet'].startswith("["):
+            mydict['Discourse Facet'] = "[\'" + mydict['Discourse Facet'] + "\']"
+        mydict['Discourse Facet'] = ast.literal_eval(mydict['Discourse Facet'])
         
-        myDict['Reference Offset'] = ast.literal_eval(myDict['Reference Offset'])
-        myDict['Citation Offset'] = ast.literal_eval(myDict['Citation Offset'])
-        myDict['Citation Marker Offset'] = ast.literal_eval(myDict['Citation Marker Offset'])
+        mydict['Reference Offset'] = ast.literal_eval(mydict['Reference Offset'])
+        mydict['Citation Offset'] = ast.literal_eval(mydict['Citation Offset'])
+        mydict['Citation Marker Offset'] = ast.literal_eval(mydict['Citation Marker Offset'])
         
-        refArtcDict = {}
-        if refArtc in retDict:
-            reftArcDic = retDict[refArtc]
+        citing_article_dict = {}
+        if citing_article in res:
+            citing_article_dict = res[citing_article]
         
-        if markerOff in refArtcDict:
-            print("Strange")
-        refArtcDict[markerOff] = myDict
-        retDict[refArtc] = refArtcDict
-    myFile.close()
-    return retDict
+        citing_article_dict[marker_offset] = mydict
+        res[citing_article] = citing_article_dict
+    myfile.close()
+    return res
 
 
 def main():
@@ -102,11 +102,11 @@ def main():
     
     #loading gold standard into dictionary
     dict_gold = {}
-    for myFile in os.listdir(args.gold_folder):
-        if myFile.startswith('.'):
+    for myfile in os.listdir(args.gold_folder):
+        if myfile.startswith('.'):
             continue
-        gold_filename=myFile.split(".")[0]
-        dict_gold[gold_filename] = loadDict(args.gold_folder+myFile)
+        gold_filename=myfile.split(".")[0]
+        dict_gold[gold_filename] = load_dict(args.gold_folder+myfile)
         
     #writing the results to this file
     csvfile=open('results_task1_last.csv', 'w') 
@@ -130,12 +130,12 @@ def main():
 
                 dict_comp={}
                 comp_file_path=test_folder+systems+"/"+runs+"/Task1/"
-                for myFile in os.listdir(comp_file_path) :
-                    if myFile.startswith('.'):
+                for myfile in os.listdir(comp_file_path) :
+                    if myfile.startswith('.'):
                         continue
-                    comp_filename=myFile.split(".")[0]
+                    comp_filename=myfile.split(".")[0]
                     #dict_comp=make_dict(comp_file_path+comp_filename+".annv3.txt",dict_comp)
-                    dict_comp[comp_filename]= loadDict(comp_file_path+myFile)
+                    dict_comp[comp_filename]= load_dict(comp_file_path+myfile)
                 for files in dict_gold :
 
                     main_file_values=dict_gold[files]
@@ -160,6 +160,7 @@ def main():
                                             [TP_discourse_facet,FP_discourse_facet,FN_discourse_facet]=[x+y for x,y in zip([TP_discourse_facet,FP_discourse_facet,FN_discourse_facet], calculate_values(gold_value["Discourse Facet"],[]))]
 
                                 else :
+                                        print(gold_values_2,comp_file_values[gold_values],gold_values_2 in comp_file_values[gold_values] )
                                         gold_value=main_file_values[gold_values][gold_values_2]
                                         [TP_reference_offset,FP_reference_offset,FN_reference_offset]=[x+y for x,y in zip([TP_reference_offset,FP_reference_offset,FN_reference_offset], calculate_values(gold_value["Reference Offset"],[]))]
                                         [TP_disourse_facet,FP_discourse_facet,FN_discourse_facet]=[x+y for x,y in zip([TP_discourse_facet,FP_discourse_facet,FN_discourse_facet], calculate_values(gold_value["Discourse Facet"],[]))]
