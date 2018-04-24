@@ -18,6 +18,8 @@ class system_variables:
 
     stoplist = stopwords.words("english") + ", \" : ' . ; ! ?".split()
 
+    tok = wordpunct_tokenize
+
 
 class Section:
     def __init__(self,xml_string):
@@ -72,8 +74,15 @@ class Entry(dict): #Each entry from the annotation files
 
     def featurize(self):
         fv = {} #feature_vector
-        for x in self['Citation Text'].split(" "):
-            fv[x]=1
+        cit = set(system_variables.tok(self['Citation Text']))
+        ref = set(system_variables.tok(self['Reference Text']))
+        for x in cit:
+            fv["c_"+x] = 1
+        for x in ref:
+            fv["r_"+x] = 1
+        fv["intersection"] = len(cit.intersection(ref))
+        fv["len_cit_off"] = self["Citation Offset"].count(",")
+        fv["len_ref_off"] = self["Reference Offset"].count(",")
         return fv
 
     def get_ground_truth(self):
@@ -148,6 +157,26 @@ def instance_sentence_list(sentence_string):
         return [Sentence('<S sid="-1" ssid="-1">ERROR</S>',section_list=[])]
     return sentence_list
 
+
+def get_training_entries_from_file(infile):
+    labels = []
+    entries = []
+    for line in open(infile).readlines():
+        line = line.strip()
+        if line:
+            try:
+                line = line.replace("</S>\t\t\t<S","</S><S").replace("</S>\t\t<S","</S><S").replace("</S>\t<S","</S><S")
+                leftside, rightside = line.strip().split("\t")
+                e = Entry()
+                blocks = rightside.split(" | ")
+                labels.append(leftside)
+                for field, block in zip(system_variables.header_fields, blocks):
+                    value = block.replace(field + ":", "").strip()
+                    e[field] = value
+                entries.append(e)
+            except:
+                print(line)
+    return entries,labels
 
 
 def get_entries_from_folder(startfolder):
